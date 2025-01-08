@@ -41,7 +41,7 @@ proc tokenize(filename, text: string): seq[Token] =
     regstring  <- '\'' * *(escapes | 1 - '\'') * '\'':
       res.add Token(typ: String, text: ($0).unescape(prefix = "'", suffix = "'"), filePos: @0)
     string     <- dblstring | regstring
-    sym        <- {'=', ';', '{', '}', '[', ']', '<', '>', ','}:
+    sym        <- {'=', ';', '{', '}', '[', ']', '<', '>', ',', '(', ')'}:
       res.add Token(typ: Symbol, text: $0, filePos: @0)
     # according to the official syntax, this is correct.
     # but in reality, leading underscores are accepted
@@ -84,6 +84,7 @@ type
     enums: seq[(Token, ProtoNode)]
     reservedValues: seq[ProtoNode]
     reservedBlocks: seq[(Token, ProtoNode)]
+    services: seq[(Token, ProtoNode)]
 
 proc extract(x: var seq[(Token, ProtoNode)], s: Token): seq[ProtoNode] =
   # The "extract mechanism" is used to handle this case:
@@ -261,7 +262,18 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
         kind: Enum,
         values: ps.fields.extract($0)
       )))
-    typedecl   <- (msg | enumdecl)
+
+    messageType <- ?'.' * ident * *('.' * ident)
+    rpc <- ["rpc"] * ident * ['('] * messageType * [')'] * ["returns"] * ['('] * messageType * [')'] * [';']
+    serviceBody <- ['{'] * *(option | rpc) * ['}']
+    servicedecl <- ["service"] * >ident * serviceBody:
+      let fields = ps.fields.extract($0)
+      ps.services.add(($0, ProtoNode(
+        serviceName: ($1).text,
+        kind: Service
+      )))
+
+    typedecl   <- (msg | enumdecl | servicedecl)
     onething   <- (pkg | option | syntax | impor | typedecl | extend2)
     g          <- +onething
 
