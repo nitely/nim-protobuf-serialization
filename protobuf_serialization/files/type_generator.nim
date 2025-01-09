@@ -1,4 +1,4 @@
-import os, algorithm, strutils, tables
+import os, algorithm, strutils, tables, strformat
 import macros
 import stew/shims/macros as stewmacros
 import decldef
@@ -70,10 +70,10 @@ proc isNested(base: string, currentName: string, messages: seq[ProtoNode]): bool
 
 # Exported for the tests.
 proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
-  var
-    packages: seq[ProtoNode] = parseProtobuf(filepath).packages
-    queue: seq[ProtoNode] = @[]
-  result = newNimNode(nnkTypeSection)
+  var packages: seq[ProtoNode] = parseProtobuf(filepath).packages
+  var queue: seq[ProtoNode] = @[]
+  var types = newNimNode(nnkTypeSection)
+  var consts = newNimNode(nnkConstSection)
   for parsed in packages:
     for msg in parsed.messages:
       queue.add(msg)
@@ -170,9 +170,21 @@ proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
           value[2] = newEmptyNode()
 
       if next.kind == ProtoType.Service:
-        discard
+        for rpc in next.rpcs:
+          # /helloworld.Greeter/SayHello
+          let rpcPathName = &"{next.serviceName}{rpc.rpcName}Path"
+          let rpcPathVal = if parsed.packageName != "":
+            &"/{parsed.packageName}.{next.serviceName}/{rpc.rpcName}"
+          else:
+            &"/{next.serviceName}/{rpc.rpcName}"
+          consts.add(
+            newNimNode(nnkConstDef)
+              .add(newNimNode(nnkPostfix).add(ident("*"), ident(rpcPathName)))
+              .add(newEmptyNode())
+              .add(newStrLitNode(rpcPathVal))
+          )
       else:
-        result.add(
+        types.add(
           newNimNode(nnkTypeDef).add(
             newNimNode(nnkPragmaExpr).add(
               newNimNode(nnkPostfix).add(ident("*"), ident(name)),
@@ -185,8 +197,11 @@ proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
             value
           )
         )
+  result = newNimNode(nnkStmtList)
+    .add(consts)
+    .add(types)
   when defined(LogGeneratedTypes):
-    result.storeMacroResult(true)
+    types.storeMacroResult(true)
 
 macro protoToTypes*(filepath: static[string]): untyped =
   result = protoToTypesInternal(filepath)
