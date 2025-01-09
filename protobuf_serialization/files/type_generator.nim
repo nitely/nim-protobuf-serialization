@@ -79,13 +79,17 @@ proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
       queue.add(msg)
     for pbEnum in parsed.packageEnums:
       queue.add(pbEnum)
+    for srv in parsed.services:
+      queue.add(srv)
 
     while queue.len != 0:
       var
         next: ProtoNode = queue.pop()
         name: string
         value: NimNode
-      if next.kind == ProtoType.Enum:
+      if next.kind == ProtoType.Service:
+        discard
+      elif next.kind == ProtoType.Enum:
         # TODO: allow_alias
         var alreadySeen: seq[int] = @[]
         name = next.enumName
@@ -165,20 +169,22 @@ proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
         if value[2].len == 0:
           value[2] = newEmptyNode()
 
-
-      result.add(
-        newNimNode(nnkTypeDef).add(
-          newNimNode(nnkPragmaExpr).add(
-            newNimNode(nnkPostfix).add(ident("*"), ident(name)),
-            if next.kind == ProtoType.Enum:
-              newNimNode(nnkPragma).add(ident("pure"), ident("proto3"))
-            else:
-              newNimNode(nnkPragma).add(ident("proto3"))
-          ),
-          newEmptyNode(),
-          value
+      if next.kind == ProtoType.Service:
+        discard
+      else:
+        result.add(
+          newNimNode(nnkTypeDef).add(
+            newNimNode(nnkPragmaExpr).add(
+              newNimNode(nnkPostfix).add(ident("*"), ident(name)),
+              if next.kind == ProtoType.Enum:
+                newNimNode(nnkPragma).add(ident("pure"), ident("proto3"))
+              else:
+                newNimNode(nnkPragma).add(ident("proto3"))
+            ),
+            newEmptyNode(),
+            value
+          )
         )
-      )
   when defined(LogGeneratedTypes):
     result.storeMacroResult(true)
 

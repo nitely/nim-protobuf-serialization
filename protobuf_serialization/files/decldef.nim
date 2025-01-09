@@ -69,6 +69,7 @@ type
       packageName*: string
       messages*: seq[ProtoNode]
       packageEnums*: seq[ProtoNode]
+      services*: seq[ProtoNode]
     of File:
       syntax*: string
       imported*: seq[ProtoNode]

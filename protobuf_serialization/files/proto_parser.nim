@@ -84,6 +84,7 @@ type
     enums: seq[(Token, ProtoNode)]
     reservedValues: seq[ProtoNode]
     reservedBlocks: seq[(Token, ProtoNode)]
+    rpcs: seq[ProtoNode]
     services: seq[(Token, ProtoNode)]
 
 proc extract(x: var seq[(Token, ProtoNode)], s: Token): seq[ProtoNode] =
@@ -264,12 +265,18 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
       )))
 
     messageType <- ?'.' * ident * *('.' * ident)
-    rpc <- ["rpc"] * ident * ['('] * messageType * [')'] * ["returns"] * ['('] * messageType * [')'] * [';']
+    rpc <- ["rpc"] * >ident * ['('] * >messageType * [')'] * ["returns"] * ['('] * >messageType * [')'] * [';']:
+      ps.rpcs.add(ProtoNode(
+        rpcName: ($1).text,
+        rpcParam: ($2).text,
+        rpcReturns: ($3).text,
+        kind: Rpc
+      ))
     serviceBody <- ['{'] * *(option | rpc) * ['}']
     servicedecl <- ["service"] * >ident * serviceBody:
-      let fields = ps.fields.extract($0)
       ps.services.add(($0, ProtoNode(
         serviceName: ($1).text,
+        rpcs: ps.rpcs,
         kind: Service
       )))
 
@@ -294,6 +301,7 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
   result = state.currentPackage
   result.messages &= state.messages.mapIt(it[1])
   result.packageEnums &= state.enums.mapIt(it[1])
+  result.services &= state.services.mapIt(it[1])
 
   for impors in state.imports:
     const googlePrefix = "google/protobuf/"
