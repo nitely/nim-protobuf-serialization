@@ -41,7 +41,7 @@ proc tokenize(filename, text: string): seq[Token] =
     regstring  <- '\'' * *(escapes | 1 - '\'') * '\'':
       res.add Token(typ: String, text: ($0).unescape(prefix = "'", suffix = "'"), filePos: @0)
     string     <- dblstring | regstring
-    sym        <- {'=', ';', '{', '}', '[', ']', '<', '>', ','}:
+    sym        <- {'=', ';', '{', '}', '[', ']', '<', '>', ',', '(', ')'}:
       res.add Token(typ: Symbol, text: $0, filePos: @0)
     # according to the official syntax, this is correct.
     # but in reality, leading underscores are accepted
@@ -84,6 +84,8 @@ type
     enums: seq[(Token, ProtoNode)]
     reservedValues: seq[ProtoNode]
     reservedBlocks: seq[(Token, ProtoNode)]
+    rpcs: seq[ProtoNode]
+    services: seq[(Token, ProtoNode)]
 
 proc extract(x: var seq[(Token, ProtoNode)], s: Token): seq[ProtoNode] =
   # The "extract mechanism" is used to handle this case:
@@ -261,7 +263,25 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
         kind: Enum,
         values: ps.fields.extract($0)
       )))
-    typedecl   <- (msg | enumdecl)
+
+    messageType <- ?'.' * ident * *('.' * ident)
+    rpc <- ["rpc"] * >ident * ['('] * ?["stream"] * >messageType * [')'] * ["returns"] * ['('] * ?["stream"] * >messageType * [')'] * ((['{'] * ?option * ['}']) | [';']):
+      ps.rpcs.add(ProtoNode(
+        rpcName: ($1).text,
+        rpcParam: ($2).text,
+        rpcReturns: ($3).text,
+        kind: Rpc
+      ))
+    serviceBody <- ['{'] * *(option | rpc) * ['}']
+    servicedecl <- ["service"] * >ident * serviceBody:
+      ps.services.add(($0, ProtoNode(
+        serviceName: ($1).text,
+        rpcs: ps.rpcs,
+        kind: Service
+      )))
+      ps.rpcs.setLen 0
+
+    typedecl   <- (msg | enumdecl | servicedecl)
     onething   <- (pkg | option | syntax | impor | typedecl | extend2)
     g          <- +onething
 
@@ -282,6 +302,7 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
   result = state.currentPackage
   result.messages &= state.messages.mapIt(it[1])
   result.packageEnums &= state.enums.mapIt(it[1])
+  result.services &= state.services.mapIt(it[1])
 
   for impors in state.imports:
     const googlePrefix = "google/protobuf/"

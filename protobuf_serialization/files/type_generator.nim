@@ -1,4 +1,4 @@
-import os, algorithm, strutils, tables
+import os, algorithm, strutils, tables, strformat
 import macros
 import stew/shims/macros as stewmacros
 import decldef
@@ -70,22 +70,26 @@ proc isNested(base: string, currentName: string, messages: seq[ProtoNode]): bool
 
 # Exported for the tests.
 proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
-  var
-    packages: seq[ProtoNode] = parseProtobuf(filepath).packages
-    queue: seq[ProtoNode] = @[]
-  result = newNimNode(nnkTypeSection)
+  var packages: seq[ProtoNode] = parseProtobuf(filepath).packages
+  var queue: seq[ProtoNode] = @[]
+  var types = newNimNode(nnkTypeSection)
+  var consts = newNimNode(nnkConstSection)
   for parsed in packages:
     for msg in parsed.messages:
       queue.add(msg)
     for pbEnum in parsed.packageEnums:
       queue.add(pbEnum)
+    for srv in parsed.services:
+      queue.add(srv)
 
     while queue.len != 0:
       var
         next: ProtoNode = queue.pop()
         name: string
         value: NimNode
-      if next.kind == ProtoType.Enum:
+      if next.kind == ProtoType.Service:
+        discard
+      elif next.kind == ProtoType.Enum:
         # TODO: allow_alias
         var alreadySeen: seq[int] = @[]
         name = next.enumName
@@ -165,22 +169,38 @@ proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
         if value[2].len == 0:
           value[2] = newEmptyNode()
 
-
-      result.add(
-        newNimNode(nnkTypeDef).add(
-          newNimNode(nnkPragmaExpr).add(
-            newNimNode(nnkPostfix).add(ident("*"), ident(name)),
-            if next.kind == ProtoType.Enum:
-              newNimNode(nnkPragma).add(ident("pure"), ident("proto3"))
-            else:
-              newNimNode(nnkPragma).add(ident("proto3"))
-          ),
-          newEmptyNode(),
-          value
+      if next.kind == ProtoType.Service:
+        for rpc in next.rpcs:
+          let rpcPathName = &"{next.serviceName}{rpc.rpcName}Path"
+          let rpcPathVal = if parsed.packageName != "":
+            &"/{parsed.packageName}.{next.serviceName}/{rpc.rpcName}"
+          else:
+            &"/{next.serviceName}/{rpc.rpcName}"
+          consts.add(
+            newNimNode(nnkConstDef)
+              .add(newNimNode(nnkPostfix).add(ident("*"), ident(rpcPathName)))
+              .add(newEmptyNode())
+              .add(newStrLitNode(rpcPathVal))
+          )
+      else:
+        types.add(
+          newNimNode(nnkTypeDef).add(
+            newNimNode(nnkPragmaExpr).add(
+              newNimNode(nnkPostfix).add(ident("*"), ident(name)),
+              if next.kind == ProtoType.Enum:
+                newNimNode(nnkPragma).add(ident("pure"), ident("proto3"))
+              else:
+                newNimNode(nnkPragma).add(ident("proto3"))
+            ),
+            newEmptyNode(),
+            value
+          )
         )
-      )
+  result = newNimNode(nnkStmtList)
+    .add(consts)
+    .add(types)
   when defined(LogGeneratedTypes):
-    result.storeMacroResult(true)
+    types.storeMacroResult(true)
 
 macro protoToTypes*(filepath: static[string]): untyped =
   result = protoToTypesInternal(filepath)

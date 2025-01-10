@@ -26,7 +26,7 @@ type
   ReservedType* = enum
     String, Number, Range
   ProtoType* = enum
-    Field, Enum, EnumVal, ReservedBlock, Reserved, Message, File, Imported, Oneof, Package, ProtoDef, Extend
+    Field, Enum, EnumVal, ReservedBlock, Reserved, Message, File, Imported, Oneof, Package, ProtoDef, Extend, Service, Rpc
   Presence* = enum
     Singular, Repeated, Optional, Required
   ProtoNode* = ref object
@@ -69,6 +69,7 @@ type
       packageName*: string
       messages*: seq[ProtoNode]
       packageEnums*: seq[ProtoNode]
+      services*: seq[ProtoNode]
     of File:
       syntax*: string
       imported*: seq[ProtoNode]
@@ -77,7 +78,13 @@ type
       packages*: seq[ProtoNode]
     of Imported:
       filename*: string
-
+    of Service:
+      serviceName*: string
+      rpcs*: seq[ProtoNode]
+    of Rpc:
+      rpcName*: string
+      rpcParam*: string
+      rpcReturns*: string
 
 proc `$`*(node: ProtoNode): string =
   case node.kind:
@@ -184,3 +191,7 @@ proc `$`*(node: ProtoNode): string =
         result &= $package
     of Imported:
       result = "Imported file " & node.filename
+    of Service:
+      result = "service " & node.serviceName
+    of Rpc:
+      result = "rpc " & node.rpcName

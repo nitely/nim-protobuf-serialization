@@ -9,6 +9,9 @@ macro test() =
   var
     parsed: NimNode = protoToTypesInternal(currentSourcePath.parentDir / "test.proto3")
     vector: NimNode = quote do:
+      const
+        SearchServiceSearchPath* = "/SearchService/Search"
+
       type
         TestEnum* {.pure, proto3.} = enum
           UNKNOWN = 0
