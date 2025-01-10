@@ -171,7 +171,6 @@ proc protoToTypesInternal*(filepath: string): NimNode {.compileTime.} =
 
       if next.kind == ProtoType.Service:
         for rpc in next.rpcs:
-          # /helloworld.Greeter/SayHello
           let rpcPathName = &"{next.serviceName}{rpc.rpcName}Path"
           let rpcPathVal = if parsed.packageName != "":
             &"/{parsed.packageName}.{next.serviceName}/{rpc.rpcName}"

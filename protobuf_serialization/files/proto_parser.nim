@@ -265,7 +265,7 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
       )))
 
     messageType <- ?'.' * ident * *('.' * ident)
-    rpc <- ["rpc"] * >ident * ['('] * >messageType * [')'] * ["returns"] * ['('] * >messageType * [')'] * [';']:
+    rpc <- ["rpc"] * >ident * ['('] * ?["stream"] * >messageType * [')'] * ["returns"] * ['('] * ?["stream"] * >messageType * [')'] * ((['{'] * ?option * ['}']) | [';']):
       ps.rpcs.add(ProtoNode(
         rpcName: ($1).text,
         rpcParam: ($2).text,
@@ -279,6 +279,7 @@ proc parseProtoPackage(file: string, toImport: var HashSet[string]): ProtoNode =
         rpcs: ps.rpcs,
         kind: Service
       )))
+      ps.rpcs.setLen 0
 
     typedecl   <- (msg | enumdecl | servicedecl)
     onething   <- (pkg | option | syntax | impor | typedecl | extend2)
