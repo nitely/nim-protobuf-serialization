@@ -48,7 +48,7 @@ suite "Test Encoding of Protobuf 2 Semantics":
 
   test "Requires required":
     expect ProtobufReadError:
-      discard Protobuf.decode(@[], Required)
+      discard Protobuf.decode(newSeq[byte](), Required)
 
   test "Handles default":
     var fod: FullOfDefaults = FullOfDefaults(b: PBOption[default(Required)].pbSome(Required(b: 5)))
